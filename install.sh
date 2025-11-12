@@ -2,16 +2,16 @@
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Run as root: sudo bash $0 [GDRIVE_URL] [MAINDOMAIN] [SECDOMAIN]"
+  echo "Run as root: sudo bash $0 [GDRIVE_URL (optional)] <MAINDOMAIN> <SECDOMAIN>"
   exit 1
 fi
 
-GDRIVE_URL="${1:-}"
-MAINDOMAIN="${2:-}"
-SECDOMAIN="${3:-}"
+# Yêu cầu người dùng nhập MAINDOMAIN và SECDOMAIN
+read -p "Enter Main Domain (MAINDOMAIN): " MAINDOMAIN
+read -p "Enter Second Domain (SECDOMAIN): " SECDOMAIN
 
 if [ -z "$MAINDOMAIN" ] || [ -z "$SECDOMAIN" ]; then
-  echo "Usage: sudo bash $0 [GDRIVE_URL (optional)] <MAINDOMAIN> <SECDOMAIN>"
+  echo "Usage: sudo bash $0 <MAINDOMAIN> <SECDOMAIN>"
   exit 1
 fi
 
@@ -37,7 +37,6 @@ fi
 systemctl enable --now nginx
 
 # ---------- Install FFmpeg ----------
-
 # Thêm kho EPEL
 dnf -y install epel-release
 
