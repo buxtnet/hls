@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# LƯU Ý: Biến GDRIVE_URL cần được truyền dưới dạng đối số thứ nhất
+# Ví dụ: sudo bash install.sh <GDRIVE_URL> video.buxt.net player.buxt.net
+
+GDRIVE_URL="${1:-}"
+
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root: sudo bash $0 [GDRIVE_URL (optional)] <MAINDOMAIN> <SECDOMAIN>"
   exit 1
@@ -40,29 +45,33 @@ if ! rpm -q nginx >/dev/null 2>&1; then
 fi
 systemctl enable --now nginx
 
-# ---------- Install FFmpeg (try EPEL and CRB first) ----------
-sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm -y
-sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-$(rpm -E %rhel).noarch.rpm -y
+# ---------- Install FFmpeg (using stable direct download links for RPM Fusion) ----------
+echo "Installing RPM Fusion repositories using stable download links..."
+
+# Cài đặt RPM Fusion Free (DÙNG download1.rpmfusion.org thay vì mirrors.rpmfusion.org)
+sudo dnf install --nogpgcheck https://download1.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm -y
+
+# Cài đặt RPM Fusion Non-Free (DÙNG download1.rpmfusion.org thay vì mirrors.rpmfusion.org)
+sudo dnf install --nogpgcheck https://download1.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-$(rpm -E %rhel).noarch.rpm -y
 
 sudo dnf clean all
 sudo dnf update -y
 if ! command -v ffmpeg >/dev/null 2>&1; then
-    echo "FFmpeg not found, installing..."
-    sudo dnf install ffmpeg ffmpeg-devel -y
+  echo "FFmpeg not found, installing..."
+  sudo dnf install ffmpeg ffmpeg-devel -y
 else
-    echo "FFmpeg is already installed."
-    ffmpeg -version
+  echo "FFmpeg is already installed."
+  ffmpeg -version
 fi
-ffmpeg -version
 
 # ---------- certbot via snap if missing ----------
 if ! command -v certbot >/dev/null 2>&1; then
   dnf -y install snapd
   systemctl enable --now snapd.socket
   ln -s /var/lib/snapd/snap /snap || true
-  snap install core --classic
-  snap refresh core
-  snap install --classic certbot
+  snap install core --classic || true
+  snap refresh core || true
+  snap install --classic certbot || true
   ln -sf /snap/bin/certbot /usr/bin/certbot
 fi
 
@@ -139,7 +148,7 @@ if [ -n "$GDRIVE_URL" ]; then
     fi
 
     # fix quyền
-    OWNER="$(stat -c %U "$TARGET_DIR")"
+    OWNER="$(stat -c %U "$TARGET_DIR" 2>/dev/null || echo root)"
     chown -R "${OWNER}":"${OWNER}" "$TARGET_DIR"
   fi
 fi
@@ -147,6 +156,7 @@ fi
 # ---------- pm2 start app (after download/extract) ----------
 if [ -d "$TARGET_DIR" ] && [ -f "${TARGET_DIR}/${ECOSYSTEM}" ]; then
   cd "$TARGET_DIR"
+  npm install --omit=dev || true # Cài đặt dependencies nếu có package.json
   pm2 start "$ECOSYSTEM"
   pm2 save
 fi
@@ -187,10 +197,17 @@ chown -R nginx:nginx "${WEBROOT}"
 chmod -R 755 "${WEBROOT}"
 nginx -t && systemctl reload nginx
 
-certbot certonly --webroot -w "${WEBROOT}" -d "${MAINDOMAIN}" --noninteractive --agree-tos -m "admin@${MAINDOMAIN}"
+# Chạy Certbot để lấy chứng chỉ
+if command -v certbot >/dev/null 2>&1; then
+    echo "Running Certbot for ${MAINDOMAIN}..."
+    certbot certonly --webroot -w "${WEBROOT}" -d "${MAINDOMAIN}" --noninteractive --agree-tos -m "admin@${MAINDOMAIN}" || {
+        echo "WARNING: Certbot failed to issue certificate. Continuing without SSL configuration for MAINDOMAIN."
+    }
+fi
 
 CERT_DIR="/etc/letsencrypt/live/${MAINDOMAIN}"
 if [ -d "$CERT_DIR" ]; then
+  echo "SSL certificate found. Configuring Nginx for SSL..."
   cat > "$SSL_CONF_PATH" <<EOF
 server {
     listen 443 ssl http2;
@@ -225,11 +242,14 @@ server {
 EOF
 
   nginx -t && systemctl reload nginx
+else
+    echo "No SSL certificate found. Skipping SSL configuration for MAINDOMAIN."
 fi
 
 # --------- SECOND domain (Cloudflare proxied) ----------
 SEC_CONF_PATH="${NGINX_CONF_DIR}/${SECDOMAIN}.conf"
 
+echo "Configuring Nginx for SECOND domain: ${SECDOMAIN}..."
 cat > "$SEC_CONF_PATH" <<EOF
 server {
     listen 80;
@@ -294,6 +314,7 @@ EOF
 nginx -t && systemctl reload nginx
 
 # --------- Cloudflare IP firewall setup ----------
+echo "Configuring firewall for Cloudflare IP ranges..."
 CF_JSON=$(curl -s https://api.cloudflare.com/client/v4/ips)
 CF_V4=$(echo "$CF_JSON" | jq -r '.result.ipv4_cidrs[]' 2>/dev/null)
 CF_V6=$(echo "$CF_JSON" | jq -r '.result.ipv6_cidrs[]' 2>/dev/null)
