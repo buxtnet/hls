@@ -279,35 +279,6 @@ EOF
 
 nginx -t && systemctl reload nginx
 
-# --------- Thiết lập tường lửa chỉ cho Cloudflare IP ----------
-echo "Configuring firewall for Cloudflare IP ranges..."
-CF_JSON=$(curl -s https://api.cloudflare.com/client/v4/ips)
-CF_V4=$(echo "$CF_JSON" | jq -r '.result.ipv4_cidrs[]' 2>/dev/null)
-CF_V6=$(echo "$CF_JSON" | jq -r '.result.ipv6_cidrs[]' 2>/dev/null)
-
-ZONE_NAME="cloudflare-ips"
-
-# Tạo zone nếu chưa tồn tại
-firewall-cmd --permanent --query-zone="$ZONE_NAME" >/dev/null 2>&1 || firewall-cmd --permanent --new-zone="$ZONE_NAME"
-
-# Remove all sources first (giữ lại || true để bỏ qua cảnh báo nếu trống)
-firewall-cmd --permanent --zone="$ZONE_NAME" --remove-source=all || true
-
-# Thêm IP Cloudflare (Kiểm tra trước khi thêm)
-for src in $CF_V4 $CF_V6; do
-  firewall-cmd --permanent --zone="$ZONE_NAME" --query-source="$src" >/dev/null 2>&1 || firewall-cmd --permanent --zone="$ZONE_NAME" --add-source="$src"
-done
-
-# Thêm dịch vụ HTTP/HTTPS cho zone Cloudflare (Kiểm tra trước khi thêm)
-firewall-cmd --permanent --zone="$ZONE_NAME" --query-service=http >/dev/null 2>&1 || firewall-cmd --permanent --zone="$ZONE_NAME" --add-service=http
-firewall-cmd --permanent --zone="$ZONE_NAME" --query-service=https >/dev/null 2>&1 || firewall-cmd --permanent --zone="$ZONE_NAME" --add-service=https
-
-# Giới hạn truy cập HTTP/HTTPS bên ngoài Cloudflare (Chỉ xóa nếu đang bật)
-firewall-cmd --permanent --zone=public --query-service=http >/dev/null 2>&1 && firewall-cmd --permanent --zone=public --remove-service=http
-firewall-cmd --permanent --zone=public --query-service=https >/dev/null 2>&1 && firewall-cmd --permanent --zone=public --remove-service=https
-
-firewall-cmd --reload
-
 # ------------- finish -------------
 echo "Done."
 echo "MAIN domain: ${MAINDOMAIN} (cert dir: ${CERT_DIR:-not-found})"
