@@ -138,8 +138,8 @@ if [ -n "$GDRIVE_URL" ]; then
         shopt -s dotglob
         mv -f "$ECOSYS_DIR"/* "$TARGET_DIR"/
         shopt -u dotglob
-      }
-    }
+      fi # ĐÃ SỬA: Thay thế '}' bằng 'fi'
+    fi # ĐÃ SỬA: Thay thế '}' bằng 'fi'
 
     # Phân quyền
     OWNER="$(stat -c %U "$TARGET_DIR" 2>/dev/null || echo root)"
