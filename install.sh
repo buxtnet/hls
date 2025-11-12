@@ -41,8 +41,9 @@ fi
 systemctl enable --now nginx
 
 # ---------- Install FFmpeg (try EPEL and CRB first) ----------
-sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-9.noarch.rpm
-sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-9.noarch.rpm -y
+sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm -y
+sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-$(rpm -E %rhel).noarch.rpm -y
+
 sudo dnf clean all
 sudo dnf update -y
 if ! command -v ffmpeg >/dev/null 2>&1; then
