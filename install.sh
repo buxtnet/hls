@@ -7,15 +7,19 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Yêu cầu người dùng nhập MAINDOMAIN và SECDOMAIN
-read -p "Enter Main Domain (MAINDOMAIN): " MAINDOMAIN
-read -p "Enter Second Domain (SECDOMAIN): " SECDOMAIN
+read -p "Enter Main Domain (MAINDOMAIN) [default: video.buxt.net]: " MAINDOMAIN
+read -p "Enter Second Domain (SECDOMAIN) [default: player.buxt.net]: " SECDOMAIN
 
+MAINDOMAIN="${MAINDOMAIN:-video.buxt.net}"
+SECDOMAIN="${SECDOMAIN:-player.buxt.net}"
 if [ -z "$MAINDOMAIN" ] || [ -z "$SECDOMAIN" ]; then
   echo "Usage: sudo bash $0 <MAINDOMAIN> <SECDOMAIN>"
   exit 1
 fi
+echo "Using Main Domain: $MAINDOMAIN"
+echo "Using Second Domain: $SECDOMAIN"
 
-# ---------- basic ----------
+
 dnf -y update
 dnf -y install curl wget git lsof which jq unzip tar python3-pip
 
@@ -37,14 +41,11 @@ fi
 systemctl enable --now nginx
 
 # ---------- Install FFmpeg (try EPEL and CRB first) ----------
-dnf -y install epel-release
-sudo dnf config-manager --set-enabled crb
+dnf -y install https://download1.rpmfusion.org/free/el/rpmfusion-free-release-9.rpm
 
-# Cài đặt FFmpeg
 if ! dnf install -y ffmpeg ffmpeg-devel; then
     echo "FFmpeg not found in repositories, trying Snap or building from source..."
-    # Cài đặt qua Snap nếu không có trong kho
-    snap install ffmpeg || {
+    if ! snap install ffmpeg; then
         echo "FFmpeg installation via Snap failed. Trying to build from source..."
         cd /usr/local/src
         git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
@@ -52,7 +53,7 @@ if ! dnf install -y ffmpeg ffmpeg-devel; then
         ./configure
         make
         sudo make install
-    }
+    fi
 fi
 
 ffmpeg -version
