@@ -22,13 +22,12 @@ fi
 echo "Using Main Domain: $MAINDOMAIN"
 echo "Using Second Domain: $SECDOMAIN"
 
-
 dnf -y update
 dnf -y install curl wget git lsof which jq unzip tar python3-pip
 
 # Cài đặt Node.js 22 (Kiểm tra node -v)
 if ! command -v node >/dev/null 2>&1 || ! node -v | grep -q "v22"; then
-  curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+  curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - 
   dnf -y install nodejs
 fi
 
@@ -138,8 +137,8 @@ if [ -n "$GDRIVE_URL" ]; then
         shopt -s dotglob
         mv -f "$ECOSYS_DIR"/* "$TARGET_DIR"/
         shopt -u dotglob
-      fi # ĐÃ SỬA: Thay thế '}' bằng 'fi'
-    fi # ĐÃ SỬA: Thay thế '}' bằng 'fi'
+      fi
+    fi
 
     # Phân quyền
     OWNER="$(stat -c %U "$TARGET_DIR" 2>/dev/null || echo root)"
