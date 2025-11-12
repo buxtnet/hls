@@ -1,26 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Biến GDRIVE_URL được truyền dưới dạng đối số thứ nhất
-GDRIVE_URL="${1:-}"
-
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Run as root: sudo bash $0 [GDRIVE_URL (optional)] <MAINDOMAIN> <SECDOMAIN>"
+  echo "Run as root: sudo bash $0 <MAINDOMAIN> <SECDOMAIN>"
   exit 1
 fi
 
 # Nhập tên miền
 read -p "Enter Main Domain (MAINDOMAIN) [default: video.buxt.net]: " MAINDOMAIN
 read -p "Enter Second Domain (SECDOMAIN) [default: player.buxt.net]: " SECDOMAIN
+read -p "Enter Google Drive URL: " GDRIVE_URL
 
 MAINDOMAIN="${MAINDOMAIN:-video.buxt.net}"
 SECDOMAIN="${SECDOMAIN:-player.buxt.net}"
-if [ -z "$MAINDOMAIN" ] || [ -z "$SECDOMAIN" ]; then
-  echo "Usage: sudo bash $0 <MAINDOMAIN> <SECDOMAIN>"
+
+if [ -z "$MAINDOMAIN" ] || [ -z "$SECDOMAIN" ] || [ -z "$GDRIVE_URL" ]; then
+  echo "Usage: sudo bash $0 <MAINDOMAIN> <SECDOMAIN> <GDRIVE_URL>"
   exit 1
 fi
+
 echo "Using Main Domain: $MAINDOMAIN"
 echo "Using Second Domain: $SECDOMAIN"
+echo "Using Google Drive URL: $GDRIVE_URL"
 
 # Cài đặt các package cần thiết
 dnf -y update
@@ -55,7 +56,6 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   sudo dnf install ffmpeg ffmpeg-devel -y
 else
   echo "FFmpeg is already installed."
-  ffmpeg -version
 fi
 
 # Cài đặt Certbot qua Snap (Kiểm tra command)
@@ -128,13 +128,11 @@ if [ -n "$GDRIVE_URL" ]; then
 
   cd "$TARGET_DIR"
 
+  # Chuyển đổi URL từ Google Drive
+  FILE_ID=$(echo "$GDRIVE_URL" | sed 's/.*\/d\/\([^\/]*\)\/.*/\1/')
+
   # Tải từ Google Drive
-  gdown "$GDRIVE_URL" || {
-    if [[ "$GDRIVE_URL" =~ /d/([^/]+) ]]; then
-      FILEID="${BASH_REMATCH[1]}"
-      gdown "https://drive.google.com/uc?export=download&id=${FILEID}"
-    fi
-  }
+  gdown "https://drive.google.com/uc?export=download&id=${FILE_ID}"
 
   # Giải nén
   LATEST_FILE="$(find "$TARGET_DIR" -maxdepth 1 -type f ! -name '*.partial' -printf '%T@ %p\n' | sort -nr | awk 'NR==1{print $2}')"
