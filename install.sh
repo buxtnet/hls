@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+sudo dnf install -y epel-release
+sudo dnf config-manager --set-enabled crb
+
 if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
@@ -35,6 +38,9 @@ if ! rpm -q nginx >/dev/null 2>&1; then
   dnf -y -q install nginx >/dev/null 2>&1
 fi
 systemctl enable --now nginx >/dev/null 2>&1
+
+sudo dnf install --nogpgcheck https://download1.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm -y
+sudo dnf install --nogpgcheck https://download1.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-$(rpm -E %rhel).noarch.rpm -y
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
   dnf install ffmpeg ffmpeg-devel -y >/dev/null 2>&1
