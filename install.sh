@@ -2,13 +2,23 @@
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Run as root: sudo bash $0"
+  echo "Run as root: sudo bash $0 [GDRIVE_URL] [MAINDOMAIN] [SECDOMAIN]"
+  exit 1
+fi
+
+# Yêu cầu người dùng nhập MAINDOMAIN và SECDOMAIN
+read -p "Enter Main Domain (MAINDOMAIN): " MAINDOMAIN
+read -p "Enter Second Domain (SECDOMAIN): " SECDOMAIN
+
+# Nếu thiếu domain thì dừng script
+if [ -z "$MAINDOMAIN" ] || [ -z "$SECDOMAIN" ]; then
+  echo "Usage: sudo bash $0 [GDRIVE_URL (optional)] <MAINDOMAIN> <SECDOMAIN>"
   exit 1
 fi
 
 # ---------- basic ----------
 dnf -y update
-dnf -y install -y curl wget git lsof which jq unzip tar python3-pip
+dnf -y install curl wget git lsof which jq unzip tar python3-pip
 
 # node 22
 if ! command -v node >/dev/null 2>&1 || ! node -v | grep -q "v22"; then
@@ -22,32 +32,35 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 
 # nginx
-dnf -y install -y nginx
+if ! rpm -q nginx >/dev/null 2>&1; then
+  dnf -y install nginx
+fi
 systemctl enable --now nginx
 
 # ffmpeg via rpmfusion
 if ! dnf repolist all | grep -qi rpmfusion; then
   dnf -y install "https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm"
 fi
-dnf -y install -y ffmpeg ffmpeg-devel || true
+if ! rpm -q ffmpeg >/dev/null 2>&1; then
+  dnf -y install ffmpeg ffmpeg-devel
+fi
 
 # certbot via snap if missing
 if ! command -v certbot >/dev/null 2>&1; then
-  dnf -y install -y snapd || true
-  systemctl enable --now snapd.socket || true
-  [ -e /snap ] || ln -s /var/lib/snapd/snap /snap || true
-  sleep 2
-  snap install core --classic || true
-  snap refresh core || true
-  snap install --classic certbot || true
-  ln -sf /snap/bin/certbot /usr/bin/certbot || true
+  dnf -y install snapd
+  systemctl enable --now snapd.socket
+  ln -s /var/lib/snapd/snap /snap || true
+  snap install core --classic
+  snap refresh core
+  snap install --classic certbot
+  ln -sf /snap/bin/certbot /usr/bin/certbot
 fi
 
 # firewall basics
-if ! systemctl is-active --quiet firewalld; then
-  dnf -y install -y firewalld
-  systemctl enable --now firewalld
+if ! rpm -q firewalld >/dev/null 2>&1; then
+  dnf -y install firewalld
 fi
+systemctl enable --now firewalld
 firewall-cmd --permanent --add-service=ssh
 firewall-cmd --permanent --add-port=3000/tcp
 firewall-cmd --reload
@@ -68,17 +81,13 @@ mkdir -p "$NGINX_CONF_DIR"
 mkdir -p "$WEBROOT/.well-known/acme-challenge"
 
 # ---------- DOWNLOAD FROM GOOGLE DRIVE (runs BEFORE pm2 start) ----------
-read -rp "Enter Google Drive share URL to download and unzip into ${TARGET_DIR} (leave empty to skip): " GDRIVE_URL
-GDRIVE_URL="${GDRIVE_URL## }"
-GDRIVE_URL="${GDRIVE_URL%% }"
-
 if [ -n "$GDRIVE_URL" ]; then
   # đảm bảo python3 và pip3 có sẵn
   if ! command -v python3 >/dev/null 2>&1; then
-    dnf -y install -y python3
+    dnf -y install python3
   fi
   if ! command -v pip3 >/dev/null 2>&1; then
-    dnf -y install -y python3-pip
+    dnf -y install python3-pip
   fi
 
   # cài gdown nếu chưa có
@@ -89,12 +98,12 @@ if [ -n "$GDRIVE_URL" ]; then
   cd "$TARGET_DIR"
 
   # tải từ Google Drive
-  if ! gdown "$GDRIVE_URL"; then
+  gdown "$GDRIVE_URL" || {
     if [[ "$GDRIVE_URL" =~ /d/([^/]+) ]]; then
       FILEID="${BASH_REMATCH[1]}"
-      gdown "https://drive.google.com/uc?export=download&id=${FILEID}" || true
+      gdown "https://drive.google.com/uc?export=download&id=${FILEID}"
     fi
-  fi
+  }
 
   # tìm file mới nhất
   LATEST_FILE="$(find "$TARGET_DIR" -maxdepth 1 -type f ! -name '*.partial' -printf '%T@ %p\n' | sort -nr | awk 'NR==1{print $2}')"
@@ -114,7 +123,7 @@ if [ -n "$GDRIVE_URL" ]; then
       ECOSYS_DIR="$(dirname "$FOUND_ECOSYS")"
       if [ "$ECOSYS_DIR" != "$TARGET_DIR" ]; then
         shopt -s dotglob
-        mv -f "$ECOSYS_DIR"/* "$TARGET_DIR"/ 2>/dev/null || true
+        mv -f "$ECOSYS_DIR"/* "$TARGET_DIR"/
         shopt -u dotglob
       fi
     fi
@@ -128,19 +137,11 @@ fi
 # ---------- pm2 start app (after download/extract) ----------
 if [ -d "$TARGET_DIR" ] && [ -f "${TARGET_DIR}/${ECOSYSTEM}" ]; then
   cd "$TARGET_DIR"
-  pm2 start "$ECOSYSTEM" || true
-  pm2 save || true
+  pm2 start "$ECOSYSTEM"
+  pm2 save
 fi
 
 # ---------- Nginx + Certbot configuration ----------
-read -rp "Enter MAIN domain (DNS only for cert issuance), e.g. tailendi.vip-streamvideogg.xyz: " MAINDOMAIN
-MAINDOMAIN="${MAINDOMAIN## }"
-MAINDOMAIN="${MAINDOMAIN%% }"
-if [ -z "$MAINDOMAIN" ]; then
-  echo "No main domain provided. Exiting."
-  exit 1
-fi
-
 HTTP_CONF_PATH="${NGINX_CONF_DIR}/${MAINDOMAIN}.conf"
 SSL_CONF_PATH="${NGINX_CONF_DIR}/${MAINDOMAIN}-ssl.conf"
 
@@ -174,12 +175,9 @@ EOF
 
 chown -R nginx:nginx "${WEBROOT}"
 chmod -R 755 "${WEBROOT}"
-nginx -t
-systemctl reload nginx
+nginx -t && systemctl reload nginx
 
-if command -v certbot >/dev/null 2>&1; then
-  certbot certonly --webroot -w "${WEBROOT}" -d "${MAINDOMAIN}" --noninteractive --agree-tos -m "admin@${MAINDOMAIN}" || true
-fi
+certbot certonly --webroot -w "${WEBROOT}" -d "${MAINDOMAIN}" --noninteractive --agree-tos -m "admin@${MAINDOMAIN}"
 
 CERT_DIR="/etc/letsencrypt/live/${MAINDOMAIN}"
 if [ -d "$CERT_DIR" ]; then
@@ -205,14 +203,7 @@ server {
     }
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_cache_bypass \$http_upgrade;
+        return 301 https://${SECDOMAIN}\$request_uri;
     }
 }
 
@@ -223,19 +214,10 @@ server {
 }
 EOF
 
-  nginx -t
-  systemctl reload nginx
+  nginx -t && systemctl reload nginx
 fi
 
 # --------- SECOND domain (Cloudflare proxied) ----------
-read -rp "Enter SECOND domain (Cloudflare proxied), e.g. vip-streamvideogg.xyz: " SECDOMAIN
-SECDOMAIN="${SECDOMAIN## }"
-SECDOMAIN="${SECDOMAIN%% }"
-if [ -z "$SECDOMAIN" ]; then
-  echo "No second domain provided. Exiting."
-  exit 1
-fi
-
 SEC_CONF_PATH="${NGINX_CONF_DIR}/${SECDOMAIN}.conf"
 
 cat > "$SEC_CONF_PATH" <<EOF
@@ -299,40 +281,25 @@ server {
 }
 EOF
 
-cat > "${NGINX_CONF_DIR}/zz_block_ip.conf" <<'EOF'
-server {
-    listen 80 default_server;
-    server_name _;
-    return 444;
-}
-server {
-    listen 443 ssl default_server;
-    server_name _;
-    ssl_certificate /etc/ssl/certs/ssl-cert-snakeoil.pem;
-    ssl_certificate_key /etc/ssl/private/ssl-cert-snakeoil.key;
-    return 444;
-}
-EOF
-
-nginx -t
-systemctl reload nginx
+nginx -t && systemctl reload nginx
 
 # --------- Cloudflare IP firewall setup ----------
 CF_JSON=$(curl -s https://api.cloudflare.com/client/v4/ips)
-CF_V4=$(echo "$CF_JSON" | jq -r '.result.ipv4_cidrs[]' 2>/dev/null || true)
-CF_V6=$(echo "$CF_JSON" | jq -r '.result.ipv6_cidrs[]' 2>/dev/null || true)
+CF_V4=$(echo "$CF_JSON" | jq -r '.result.ipv4_cidrs[]' 2>/dev/null)
+CF_V6=$(echo "$CF_JSON" | jq -r '.result.ipv6_cidrs[]' 2>/dev/null)
 
-firewall-cmd --permanent --new-zone=cloudflare-ips >/dev/null 2>&1 || true
+firewall-cmd --permanent --new-zone=cloudflare-ips || true
+firewall-cmd --permanent --zone=cloudflare-ips --remove-source=all || true
 
 for src in $CF_V4 $CF_V6; do
-  firewall-cmd --permanent --zone=cloudflare-ips --add-source="$src" >/dev/null 2>&1 || true
+  firewall-cmd --permanent --zone=cloudflare-ips --add-source="$src"
 done
 
-firewall-cmd --permanent --zone=cloudflare-ips --add-service=http >/dev/null 2>&1 || true
-firewall-cmd --permanent --zone=cloudflare-ips --add-service=https >/dev/null 2>&1 || true
+firewall-cmd --permanent --zone=cloudflare-ips --add-service=http
+firewall-cmd --permanent --zone=cloudflare-ips --add-service=https
 
-firewall-cmd --permanent --zone=public --remove-service=http >/dev/null 2>&1 || true
-firewall-cmd --permanent --zone=public --remove-service=https >/dev/null 2>&1 || true
+firewall-cmd --permanent --zone=public --remove-service=http || true
+firewall-cmd --permanent --zone=public --remove-service=https || true
 
 firewall-cmd --reload
 
