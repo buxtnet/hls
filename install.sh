@@ -192,7 +192,7 @@ nginx -t && systemctl reload nginx
 if command -v certbot >/dev/null 2>&1; then
     echo "Running Certbot for ${MAINDOMAIN}..."
     certbot certonly --webroot -w "${WEBROOT}" -d "${MAINDOMAIN}" --noninteractive --agree-tos -m "admin@${MAINDOMAIN}" || {
-        echo "WARNING: Certbot failed to issue certificate. Continuing without SSL configuration for MAINDOMAIN."
+        echo "WARNING: Certbot failed to issue certificate for ${MAINDOMAIN}. Skipping SSL configuration."
     }
 fi
 
@@ -232,7 +232,7 @@ EOF
 
   nginx -t && systemctl reload nginx
 else
-    echo "No SSL certificate found. Skipping SSL configuration for MAINDOMAIN."
+    echo "No SSL certificate found for ${MAINDOMAIN}. Skipping SSL configuration."
 fi
 
 # --------- Cấu hình Nginx cho SECOND domain (Proxy Cloudflare) ----------
