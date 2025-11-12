@@ -36,17 +36,25 @@ if ! rpm -q nginx >/dev/null 2>&1; then
 fi
 systemctl enable --now nginx
 
-# ---------- Install FFmpeg ----------
-# Thêm kho EPEL
+# ---------- Install FFmpeg (try EPEL and CRB first) ----------
 dnf -y install epel-release
-
-# Kích hoạt kho PowerTools (CRB) cho FFmpeg
 sudo dnf config-manager --set-enabled crb
 
 # Cài đặt FFmpeg
-dnf -y install ffmpeg ffmpeg-devel
+if ! dnf install -y ffmpeg ffmpeg-devel; then
+    echo "FFmpeg not found in repositories, trying Snap or building from source..."
+    # Cài đặt qua Snap nếu không có trong kho
+    snap install ffmpeg || {
+        echo "FFmpeg installation via Snap failed. Trying to build from source..."
+        cd /usr/local/src
+        git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
+        cd ffmpeg
+        ./configure
+        make
+        sudo make install
+    }
+fi
 
-# Kiểm tra cài đặt
 ffmpeg -version
 
 # ---------- certbot via snap if missing ----------
