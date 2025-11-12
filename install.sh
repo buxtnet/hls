@@ -101,6 +101,24 @@ mkdir -p "$TARGET_DIR"
 mkdir -p "$NGINX_CONF_DIR"
 mkdir -p "$WEBROOT/.well-known/acme-challenge"
 
+# Kiểm tra quyền thư mục và tạo tệp thử thách
+echo "Checking and setting up webroot for Certbot..."
+if [ ! -d "$WEBROOT/.well-known/acme-challenge" ]; then
+  mkdir -p "$WEBROOT/.well-known/acme-challenge"
+fi
+chown -R nginx:nginx "$WEBROOT"
+chmod -R 755 "$WEBROOT/.well-known/acme-challenge/"
+
+# Tạo tệp thử thách để kiểm tra
+echo "test" > "$WEBROOT/.well-known/acme-challenge/test"
+
+# Kiểm tra tệp thử thách có thể truy cập được không
+if ! curl -s "http://$MAINDOMAIN/.well-known/acme-challenge/test" | grep -q "test"; then
+  echo "Error: Unable to serve the challenge file."
+  exit 1
+fi
+echo "Challenge file is accessible."
+
 # ---------- Tải và giải nén từ Google Drive ----------
 if [ -n "$GDRIVE_URL" ]; then
   if ! command -v python3 >/dev/null 2>&1; then dnf -y install python3; fi
