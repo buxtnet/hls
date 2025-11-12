@@ -41,25 +41,17 @@ fi
 systemctl enable --now nginx
 
 # ---------- Install FFmpeg (try EPEL and CRB first) ----------
-dnf -y install --nogpgcheck https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-9.noarch.rpm
-
-# Cài đặt FFmpeg từ RPM Fusion
-if ! dnf install -y ffmpeg ffmpeg-devel; then
-    echo "FFmpeg not found in repositories, trying Snap or building from source..."
-    # Cài đặt qua Snap nếu không có trong kho
-    if ! snap install ffmpeg; then
-        echo "FFmpeg installation via Snap failed. Trying to build from source..."
-        # Biên dịch FFmpeg từ mã nguồn
-        cd /usr/local/src
-        git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
-        cd ffmpeg
-        ./configure
-        make
-        sudo make install
-    fi
+sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-9.noarch.rpm
+sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-9.noarch.rpm -y
+sudo dnf clean all
+sudo dnf update -y
+if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "FFmpeg not found, installing..."
+    sudo dnf install ffmpeg ffmpeg-devel -y
+else
+    echo "FFmpeg is already installed."
+    ffmpeg -version
 fi
-
-# Kiểm tra cài đặt FFmpeg
 ffmpeg -version
 
 # ---------- certbot via snap if missing ----------
