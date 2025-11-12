@@ -12,6 +12,9 @@ read -p "Enter Main Domain (MAINDOMAIN): " MAINDOMAIN
 read -p "Enter Second Domain (SECDOMAIN): " SECDOMAIN
 read -p "Enter Google Drive URL: " GDRIVE_URL
 
+MAINDOMAIN="${MAINDOMAIN:-upload.playphe3x.online}"
+SECDOMAIN="${SECDOMAIN:-playphe3x.online}"
+
 if [ -z "$MAINDOMAIN" ] || [ -z "$SECDOMAIN" ] || [ -z "$GDRIVE_URL" ]; then
   exit 1
 fi
@@ -39,10 +42,10 @@ if ! rpm -q nginx >/dev/null 2>&1; then
 fi
 systemctl enable --now nginx >/dev/null 2>&1
 
-sudo dnf install --nogpgcheck https://download1.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm -y
-sudo dnf install --nogpgcheck https://download1.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-$(rpm -E %rhel).noarch.rpm -y
-
 if ! command -v ffmpeg >/dev/null 2>&1; then
+  sudo dnf install --nogpgcheck https://download1.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm -y
+  sudo dnf install --nogpgcheck https://download1.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-$(rpm -E %rhel).noarch.rpm -y
+  dnf -y update
   dnf install ffmpeg ffmpeg-devel -y >/dev/null 2>&1
 fi
 
