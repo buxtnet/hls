@@ -6,11 +6,10 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-# Yêu cầu người dùng nhập MAINDOMAIN và SECDOMAIN
-read -p "Enter Main Domain (MAINDOMAIN): " MAINDOMAIN
-read -p "Enter Second Domain (SECDOMAIN): " SECDOMAIN
+GDRIVE_URL="${1:-}"
+MAINDOMAIN="${2:-}"
+SECDOMAIN="${3:-}"
 
-# Nếu thiếu domain thì dừng script
 if [ -z "$MAINDOMAIN" ] || [ -z "$SECDOMAIN" ]; then
   echo "Usage: sudo bash $0 [GDRIVE_URL (optional)] <MAINDOMAIN> <SECDOMAIN>"
   exit 1
@@ -37,15 +36,21 @@ if ! rpm -q nginx >/dev/null 2>&1; then
 fi
 systemctl enable --now nginx
 
-# ffmpeg via rpmfusion
-if ! dnf repolist all | grep -qi rpmfusion; then
-  dnf -y install "https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm"
-fi
-if ! rpm -q ffmpeg >/dev/null 2>&1; then
-  dnf -y install ffmpeg ffmpeg-devel
-fi
+# ---------- Install FFmpeg ----------
 
-# certbot via snap if missing
+# Thêm kho EPEL
+dnf -y install epel-release
+
+# Kích hoạt kho PowerTools (CRB) cho FFmpeg
+sudo dnf config-manager --set-enabled crb
+
+# Cài đặt FFmpeg
+dnf -y install ffmpeg ffmpeg-devel
+
+# Kiểm tra cài đặt
+ffmpeg -version
+
+# ---------- certbot via snap if missing ----------
 if ! command -v certbot >/dev/null 2>&1; then
   dnf -y install snapd
   systemctl enable --now snapd.socket
