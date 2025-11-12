@@ -41,8 +41,7 @@ fi
 systemctl enable --now nginx
 
 # ---------- Install FFmpeg (try EPEL and CRB first) ----------
-dnf -y install https://download1.rpmfusion.org/free/el/rpmfusion-free-release-9.rpm
-
+dnf -y install --nogpgcheck https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-9.noarch.rpm
 if ! dnf install -y ffmpeg ffmpeg-devel; then
     echo "FFmpeg not found in repositories, trying Snap or building from source..."
     if ! snap install ffmpeg; then
